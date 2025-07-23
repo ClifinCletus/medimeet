@@ -1,12 +1,14 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { checkUser } from "@/lib/checkUser";
 import { creditBenefits, features, testimonials } from "@/lib/homeData";
 import { ArrowRight, Check, Stethoscope } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
-export default function Home() {
+const Home = async () => {
+  await checkUser();
   return (
     <div className="bg-background">
       {/* header */}
@@ -246,4 +248,6 @@ export default function Home() {
       </section>
     </div>
   );
-}
+};
+
+export default Home;

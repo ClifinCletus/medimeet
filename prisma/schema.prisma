@@ -1,0 +1,197 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// model -> table, enum -> allowed values only
+
+model User {
+  // PRIMARY KEY with UUID
+  id                String    @id @default(uuid())
+  
+  // UNIQUE constraints create unique indexes
+  clerkUserId       String    @unique
+  email             String    @unique
+  
+  name              String?
+  imageUrl          String?
+  role              UserRole  @default(UNASSIGNED)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Patient fields
+  credits           Int       @default(2)
+  
+  // Doctor fields
+  specialty         String?
+  experience        Int?
+  credentialUrl     String?
+  description       String?   @db.Text             // TEXT type for long content
+  verificationStatus VerificationStatus?  @default(PENDING)
+  
+  // RELATIONS: Virtual fields for Prisma queries (not actual DB columns)
+  patientAppointments Appointment[] @relation("PatientAppointments")
+  doctorAppointments  Appointment[] @relation("DoctorAppointments")
+  availabilities      Availability[]
+  transactions        CreditTransaction[]
+  payouts             Payout[]
+}
+
+// ENUM types - define allowed values
+enum UserRole {
+  UNASSIGNED
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model Availability {
+  id        String   @id @default(uuid())
+  
+  // FOREIGN KEY to User table
+  doctorId  String
+  doctor    User     @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  // fields: [doctorId] = local FK column, references: [id] = target column in User
+  
+  startTime DateTime
+  endTime   DateTime
+  status    SlotStatus @default(AVAILABLE)
+  
+  // COMPOSITE INDEX for query optimization
+  @@index([doctorId, startTime])
+}
+
+enum SlotStatus {
+  AVAILABLE
+  BOOKED
+  BLOCKED
+}
+
+model Appointment {
+  id                String   @id @default(uuid())
+  
+  // TWO FOREIGN KEYS to User table (patient and doctor)
+  patientId         String
+  patient           User     @relation("PatientAppointments", fields: [patientId], references: [id])
+  
+  doctorId          String
+  doctor            User     @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  // Named relations needed because User has multiple relations to Appointment
+  
+  startTime         DateTime
+  endTime           DateTime
+  status            AppointmentStatus @default(SCHEDULED)
+  notes             String?  @db.Text
+  patientDescription String? @db.Text
+    
+  // Video session fields
+  videoSessionId    String?
+  videoSessionToken String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // INDEXES for common query patterns
+  @@index([status, startTime])
+  @@index([doctorId, startTime])
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+model CreditTransaction {
+  id                String   @id @default(uuid())
+  
+  // FOREIGN KEY to User
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  amount            Int      // Positive = added credits, negative = used credits
+  type              TransactionType
+  packageId         String?  // Optional reference to purchased package
+  createdAt         DateTime @default(now())
+}
+
+enum TransactionType {
+  CREDIT_PURCHASE
+  APPOINTMENT_DEDUCTION
+  ADMIN_ADJUSTMENT
+}
+
+model Payout {
+  id              String        @id @default(uuid())
+  
+  // FOREIGN KEY to User (doctor)
+  doctorId        String
+  doctor          User          @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  
+  amount          Float         // Total payout amount in USD
+  credits         Int           // Number of credits being converted
+  platformFee     Float         // Platform fee (2 USD per credit)
+  netAmount       Float         // Doctor receives (8 USD per credit)
+  paypalEmail     String        // Doctor's PayPal for payment
+  status          PayoutStatus  @default(PROCESSING)
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  processedAt     DateTime?     // When admin completed payout
+  processedBy     String?       // Which admin processed it
+
+  // INDEXES for admin queries and doctor history
+  @@index([status, createdAt])
+  @@index([doctorId, status])
+}
+
+enum PayoutStatus {
+  PROCESSING  // Payout requested, awaiting admin action
+  PROCESSED   // Payout completed by admin
+}
+
+// KEY PRISMA CONCEPTS FOR MongoDB/MySQL DEVELOPERS:
+//
+// 1. PRIMARY KEYS (@id):
+//    - Similar to PRIMARY KEY in MySQL
+//    - Usually String with @default(uuid()) for auto-generated UUIDs
+//    - Or Int with @default(autoincrement()) for auto-increment integers
+//
+// 2. FOREIGN KEYS (@relation):
+//    - Creates relationships between tables
+//    - fields: [localField] -> which field holds the foreign key
+//    - references: [targetField] -> which field in target table is referenced
+//    - onDelete: Cascade/Restrict/SetNull -> what happens when referenced record is deleted
+//
+// 3. INDEXES (@@index):
+//    - Composite indexes for query optimization
+//    - Single field indexes are auto-created for @unique and @id fields
+//    - Use for fields frequently used in WHERE clauses or JOINs
+//
+// 4. UNIQUE CONSTRAINTS (@unique):
+//    - Ensures field value is unique across all records
+//    - Automatically creates an index
+//
+// 5. DATA TYPES:
+//    - String -> VARCHAR/TEXT
+//    - Int -> INTEGER
+//    - Float -> DECIMAL/FLOAT
+//    - DateTime -> TIMESTAMP
+//    - Boolean -> BOOLEAN
+//    - @db.Text -> Forces TEXT type (for long strings)
+//
+// 6. RELATIONS vs FOREIGN KEYS:
+//    - Foreign key fields (like doctorId) are actual database columns
+//    - Relation fields (like doctor User @relation(...)) are virtual - for Prisma queries only
+//    - Named relations (@relation("Name")) distinguish multiple relations to same table
