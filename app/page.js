@@ -1,14 +1,14 @@
+import Pricing from "@/components/Pricing";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { checkUser } from "@/lib/checkUser";
 import { creditBenefits, features, testimonials } from "@/lib/homeData";
 import { ArrowRight, Check, Stethoscope } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
-const Home = async () => {
-  await checkUser();
+const Home = () => {
+ 
   return (
     <div className="bg-background">
       {/* header */}
@@ -125,6 +125,7 @@ const Home = async () => {
             </p>
           </div>
           {/* pricing table */}
+          <Pricing/>
 
           <div>
             <Card className="mt-12 bg-muted/20 border-emarald-900/30">
