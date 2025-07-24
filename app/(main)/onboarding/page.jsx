@@ -95,7 +95,7 @@ const OnboardingPage = () => {
   //to handle the form submission of the doctors
   const onDoctorSubmit = async (data) => {
     if (loading) return;
-    console.log("Form data:", data); // Add this line
+    console.log("Form data:", data); //for checking purpose
 
     //here we are setting the values to the form data and then calling the server action and passing the form values
 
