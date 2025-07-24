@@ -22,7 +22,7 @@ import { Badge } from "./ui/badge";
 
 const Header = async () => {
   const user = await checkUser(); //for setting the view in header based on the role of the user
-  if (user.role === "PATIENT") {
+  if (user?.role === "PATIENT") {
     await checkAndAllocateCredits(user); // for the credits setting functionality backend
   }
 

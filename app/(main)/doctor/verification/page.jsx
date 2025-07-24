@@ -23,7 +23,7 @@ const VerificationPage = async () => {
   const isRejected = user?.verificationStatus === "REJECTED";
   //this page is designed for showing if the application from doctor is accepted or in pending stage and its further details
   return (
-    <div className="container mx-auto px-4 py-12">
+    <div className="container mx-auto px-4">
       <div className="max-w-2xl mx-auto">
         <Card className="border-emarald-900/20">
           <CardHeader className="text-center">
