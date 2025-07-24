@@ -103,7 +103,7 @@ export async function checkAndAllocateCredits(user) {
       return updatedUser;
     });
 
-    //refetch the data in these pages
+    //refetch the data in these pages without manual refersh
     revalidatePath("/doctors");
     revalidatePath("/appointments");
 
