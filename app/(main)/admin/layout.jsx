@@ -19,7 +19,7 @@ const AdminLayout = async ({ children }) => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 mt-12">
       <PageHeader icon={<ShieldCheck />} title="Admin Settings" />
 
       {/* Vertical tabs on larger screens / Horizontal tabs on mobile */}
