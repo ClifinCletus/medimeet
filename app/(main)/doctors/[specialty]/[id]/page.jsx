@@ -1,5 +1,5 @@
 import { getDoctorById, getAvailableTimeSlots } from "@/actions/appointments";
-//import  DoctorProfile from "./_components/doctor-profile";
+import  DoctorProfile from "./_components/doctor-profile";
 import { redirect } from "next/navigation";
 
 const DoctorProfilePage = async ({ params }) => {

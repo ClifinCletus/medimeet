@@ -1,3 +1,5 @@
+"use server"
+
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { addDays, addMinutes, endOfDay, format, isBefore } from "date-fns";
@@ -217,7 +219,7 @@ export async function bookAppointments(formData) {
     }
 
     //check if requested time slot is availabe (to confirm it, we are already checking it to get the slots, but still doing it)
-    const overLappingAppointment = await db.appointment.findUnique({
+    const overLappingAppointment = await db.appointment.findFirst({
       where: {
         doctorId: doctorId,
         status: "SCHEDULED",
@@ -276,7 +278,7 @@ export async function bookAppointments(formData) {
     }
 
     //create the appointment with the video session ID
-    const appointment = await tx.appointment.create({
+    const appointment = await db.appointment.create({
       data: {
         patientId: patient.id,
         doctorId: doctor.id,
