@@ -4,6 +4,8 @@ import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { format } from "date-fns";
 import { revalidatePath } from "next/cache";
+import { throwIfDisallowedDynamic } from "next/dist/server/app-render/dynamic-rendering";
+import { success } from "zod";
 
 //this is like our api(backend related)
 
@@ -114,5 +116,87 @@ export async function checkAndAllocateCredits(user) {
       error.message
     );
     return null;
+  }
+}
+
+//for the doctor appointment booking(deducts the patient's credit and add to doctor's credits)
+export async function deductCreditsForAppointment(patiendId, doctorId) {
+  try {
+    const user = await db.user.findUnique({
+      where: {
+        id: patiendId,
+      },
+    });
+
+    const doctor = await db.user.findUnique({
+      where: {
+        id: doctorId,
+      },
+    });
+
+    if (user.credits < APPOINTMENT_CREDIT_COST) {
+      throw new Error("Insufficient credits to book an appointment");
+    }
+
+    if (!doctor) {
+      throw new Error("Doctor not found!");
+    }
+
+    //doing a couple of api calls here, if one fails all the other falis here
+    /**
+     * doing here:
+     * - deduct the patients credit
+     * - add it to doctor
+     * - adds these to the transaction record
+     */
+    const result = await db.$transaction(async (tx) => {
+      //create transaction record for patient(deducting credit)
+      await tx.creditTransaction.create({
+        data: {
+          userId: user.id,
+          amount: -APPOINTMENT_CREDIT_COST, //deducting credit
+          type: "APPOINTMENT_DEDUCTION",
+        },
+      });
+
+      //create transaction record doctor(add the credits to doctor)
+      await tx.creditTransaction.create({
+        data: {
+          userId: doctor.id,
+          amount: APPOINTMENT_CREDIT_COST,
+          type: "APPOINTMENT_DEDUCTION", //using the same type for consistency
+        },
+      });
+
+      //update the patient's credit balance(decrement)
+      const updateUser = await tx.user.update({
+        where: {
+          id: user.id,
+        },
+        data: {
+          credits: {
+            decrement: APPOINTMENT_CREDIT_COST,
+          },
+        },
+      });
+
+      //update doctor's credit balance(increment)
+      await tx.user.update({
+        where: {
+          id: doctor.id,
+        },
+        data: {
+          credits: {
+            increment: APPOINTMENT_CREDIT_COST,
+          },
+        },
+      });
+
+      return updateUser;
+    });
+
+    return { success: true, user: result };
+  } catch (error) {
+    return { success: false, error: error.message };
   }
 }
