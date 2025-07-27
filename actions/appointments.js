@@ -1,4 +1,4 @@
-"use server"
+"use server";
 
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
@@ -307,5 +307,96 @@ async function createVideoSession() {
     return session.sessionId;
   } catch (error) {
     throw new Error("failed to create video session: " + error.message);
+  }
+}
+
+//creating the token for the video call
+export async function generateVideoToken(formData) {
+  const { userId } = await auth();
+
+  if (!userId) {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const user = await db.user.findUnique({
+      where: {
+        clerkUserId: userId,
+      },
+    });
+    if (!user) {
+      throw new Error("User not found!");
+    }
+
+    const appointmentId = formData.get("aapointmentId");
+
+    const appointment = await db.appointment.findUnique({
+      where: {
+        id: appointmentId,
+      },
+    });
+
+    if (!appointment) {
+      throw new Error("Appointment not found!");
+    }
+
+    //if the user who is trying to join the call(doctor or pateint) is part of the call
+    if (appointment.doctorId !== user.id || appointment.patientId !== user.id) {
+      throw new Error("You are not authorized to join this call");
+    }
+
+    if (appointment.status !== "SCHEDULED") {
+      throw new Error("This appointment is not currently scheduled");
+    }
+
+    //checking the appointment is within the valid time currently(ie, appointment start time and currennt time have a difference more than 30 minutes),then not able to join the call
+    const now = new Date();
+    const appoinmentTime = new Date(appointment.startTime);
+    const timeDifference = (appoinmentTime - now) / (1000 * 60);
+
+    if (timeDifference > 30) {
+      throw new Error(
+        "The call will be available 30 minutes before the scheduled time"
+      );
+    }
+
+    //create the token for the session:
+    // the user should not be able to use the link to join the call after the endtime of the call(so need to expire the token properly)
+
+    const appoinmentEndTime = new Date(appointment.endTime);
+    const expirationTime =
+      Math.floor(appoinmentEndTime.getTime() / 1000) + 60 * 60; //1 hour after the end time
+
+    //use the User's name and role as connection data
+    const connectionData = JSON.stringify({
+      name: user.name,
+      role: user.role,
+      userId: user.id,
+    });
+
+    //when any of the user joins the call, then creates the token(would not create the token every time)
+    const token = vonage.video.generateClientToken(appointment.videoSessionId, {
+      role: "publisher",
+      expireTime: expirationTime,
+      data: connectionData,
+    });
+
+    //update the token in db:
+    await db.appointment.update({
+      wher: {
+        id: appointmentId,
+      },
+      data: {
+        videoSessionToken: token,
+      },
+    });
+
+    return {
+      success: true,
+      videoSessionId: appointment.videoSessionId,
+      token: token,
+    };
+  } catch (error) {
+    throw new Error("Failed to generate video token: " + error.message);
   }
 }
