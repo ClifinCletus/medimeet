@@ -18,31 +18,45 @@ const vonage = new Vonage(credentials, {});
 
 //for the appointment booking and related things
 
-export async function getDoctorById(doctorId) {
+import { cache } from 'react';
+
+// Wrap getDoctorById with cache to prevent multiple calls
+export const getDoctorById = cache(async (doctorId) => {
+  console.log("getDoctorById called with:", doctorId);
+  
+  if (!doctorId || typeof doctorId !== 'string') {
+    throw new Error("Valid Doctor ID is required");
+  }
+  
   try {
     const doctor = await db.user.findUnique({
       where: {
-        id: doctorId.id,
+        id: doctorId,
         role: "DOCTOR",
         verificationStatus: "VERIFIED",
       },
+      // Add any relations you need
+      include: {
+        // Add any related data you need
+      }
     });
-
+    
     if (!doctor) {
-      throw new Error("Doctor not found");
+      throw new Error("Doctor not found or not verified");
     }
-
+    
     return { doctor };
   } catch (error) {
-    throw new Error("failed to fetch the doctor details", error.message);
+    console.error("Database error in getDoctorById:", error);
+    throw new Error("Failed to fetch doctor details: " + error.message);
   }
-}
+});
 
 export async function getAvailableTimeSlots(doctorId) {
   try {
     const doctor = await db.user.findUnique({
       where: {
-        id: doctorId.id,
+        id: doctorId,
         role: "DOCTOR",
         verificationStatus: "VERIFIED",
       },
@@ -145,7 +159,7 @@ export async function getAvailableTimeSlots(doctorId) {
             endTime: nextSlot.toISOString(),
             formatted: `${format(current, "h:mm a")} - ${format(
               //the formatted slots
-              next,
+              nextSlot,
               "h:mm a"
             )}`,
             day: format(current, "EEEE, MMMM d"), //the day
@@ -172,7 +186,7 @@ export async function getAvailableTimeSlots(doctorId) {
   }
 }
 
-export async function bookAppointments(formData) {
+export async function bookAppointment(formData) {
   const { userId } = await auth();
   if (!userId) {
     throw new Error("Unauthorized");

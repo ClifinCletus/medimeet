@@ -29,7 +29,7 @@ import SlotPicker from "./slot-picker";
 import AppointmentForm from "./appointment-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-export function DoctorProfile({ doctor, availableDays }) {
+const DoctorProfile = ({ doctor, availableDays }) =>{
   const [showBooking, setShowBooking] = useState(false); //to show the card on right side to book the appointments
   const [selectedSlot, setSelectedSlot] = useState(null); //to set the slot been selected
   const router = useRouter();
@@ -236,3 +236,5 @@ export function DoctorProfile({ doctor, availableDays }) {
     </div>
   );
 }
+
+export default DoctorProfile;

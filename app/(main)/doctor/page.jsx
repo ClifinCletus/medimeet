@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { Calendar, Clock, DollarSign } from "lucide-react";
 //import DoctorAppointmentsList from "./_components/appointments-list";
 import { getDoctorAppointments, getAvailabilitySlots } from "@/actions/doctor";
+import DoctorAppointmentsList from "./_components/appointment-list";
 //import { getDoctorEarnings, getDoctorPayouts } from "@/actions/payout";
 //import { DoctorEarnings } from "./_components/doctor-earnings";
 
@@ -66,10 +67,10 @@ const DoctorDashboardPage = async () => {
           <AvailabilitySettings slots={availabilityData.slots || []} />
         </TabsContent>
         <TabsContent value="earnings" className="border-none p-0">
-          <DoctorEarnings
+          {/* <DoctorEarnings
             earnings={earningsData.earnings || {}}
             payouts={payoutsData.payouts || []}
-          />
+          /> */}
         </TabsContent>
       </div>
     </Tabs>
