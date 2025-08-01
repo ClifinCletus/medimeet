@@ -1,4 +1,4 @@
-// the component to set the availability
+// Updated AvailabilitySettings Component
 "use client";
 
 import { useState, useEffect } from "react";
@@ -13,89 +13,135 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Clock, Plus, Loader2, AlertCircle } from "lucide-react";
-import { format } from "date-fns";
-import { setAvailabilitySlots } from "@/actions/doctor";
+import { Clock, Plus, Loader2, AlertCircle, Calendar, Trash2 } from "lucide-react";
+import { format, addDays, startOfDay } from "date-fns";
+import { setAvailabilitySlots, deleteAvailabilitySlot } from "@/actions/doctor";
 import useFetch from "@/hooks/use-fetch";
 import { toast } from "sonner";
 
 const AvailabilitySettings = ({ slots }) => {
-  const [showForm, setShowForm] = useState(false); //to show and hide the form there in the component
+  const [showForm, setShowForm] = useState(false);
+  const [selectedDate, setSelectedDate] = useState("");
 
-  // Custom hook for server action
-  const { loading, fn: submitSlots, data } = useFetch(setAvailabilitySlots);
+  // Custom hooks for server actions
+  const { loading: savingSlots, fn: submitSlots, data: saveData } = useFetch(setAvailabilitySlots);
+  const { loading: deletingSlot, fn: deleteSlot, data: deleteData } = useFetch(deleteAvailabilitySlot);
 
-  //using the reacthook form without zod
+  // Group slots by date for better display
+  const groupedSlots = slots.reduce((acc, slot) => {
+    const date = format(new Date(slot.startTime), "yyyy-MM-dd");
+    if (!acc[date]) {
+      acc[date] = [];
+    }
+    acc[date].push(slot);
+    return acc;
+  }, {});
+
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm({
     defaultValues: {
-      startTime: "",
-      endTime: "",
+      date: "",
+      startTime: "09:30", // Default start time
+      endTime: "15:30",   // Default end time
     },
   });
 
-  //fn to convert and get the date(time) properly. we would get the time and then we format ot properly here and add that to db
-  function createLocalDateFromTime(timeStr) {
-    const [hours, minutes] = timeStr.split(":").map(Number); //split the time eg: 11:12 as 11,12.so, hours=11,minutes=12
-    const now = new Date();
-    //here based on the current date, formats the date and time and return it
-    const date = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      hours,
-      minutes
-    );
+  const watchedDate = watch("date");
+
+  // Set minimum date to today - run only once on mount
+  useEffect(() => {
+    const today = format(new Date(), "yyyy-MM-dd");
+    setValue("date", today);
+    setSelectedDate(today);
+  }, []); // Empty dependency array to run only once
+
+  // Function to create proper datetime from date and time
+  function createDateTimeFromInputs(dateStr, timeStr) {
+    const [hours, minutes] = timeStr.split(":").map(Number);
+    const date = new Date(dateStr);
+    date.setHours(hours, minutes, 0, 0);
     return date;
   }
 
   // Handle slot submission
   const onSubmit = async (data) => {
-    if (loading) return;
+    if (savingSlots) return;
 
     const formData = new FormData();
 
-    const today = new Date().toISOString().split("T")[0];
+    // Create proper datetime objects
+    const startDateTime = createDateTimeFromInputs(data.date, data.startTime);
+    const endDateTime = createDateTimeFromInputs(data.date, data.endTime);
 
-    // Create date objects
-    const startDate = createLocalDateFromTime(data.startTime);
-    const endDate = createLocalDateFromTime(data.endTime);
-
-    if (startDate >= endDate) {
+    if (startDateTime >= endDateTime) {
       toast.error("End time must be after start time");
       return;
     }
 
+    // Check if slot already exists for this date
+    const existingSlotForDate = groupedSlots[data.date];
+    if (existingSlotForDate && existingSlotForDate.length > 0) {
+      toast.error("Availability already set for this date. Delete existing slot first.");
+      return;
+    }
+
     // Add to form data
-    formData.append("startTime", startDate.toISOString());
-    formData.append("endTime", endDate.toISOString());
+    formData.append("date", data.date);
+    formData.append("startTime", startDateTime.toISOString());
+    formData.append("endTime", endDateTime.toISOString());
 
     await submitSlots(formData);
   };
 
-  /****
-   * VV IMP:
-   **/
+  // Handle slot deletion
+  const handleDeleteSlot = async (slotId) => {
+    if (deletingSlot) return;
+    
+    const formData = new FormData();
+    formData.append("slotId", slotId);
+    
+    await deleteSlot(formData);
+  };
 
-  /*to set the toast as per the change in the data(ie, when we do the call to server action to do certain operations,
-  after its success(the data received back have success(ie, technically data is changed) so we show the toast message hence its a useful feature))*/
+  // Handle success responses
   useEffect(() => {
-    if (data && data?.success) {
+    if (saveData && saveData?.success) {
       setShowForm(false);
-      toast.success("Availability slots updated successfully");
+      toast.success("Availability slot created successfully");
+      // Reset form to next day
+      const nextDay = format(addDays(new Date(watchedDate), 1), "yyyy-MM-dd");
+      setValue("date", nextDay);
+      setValue("startTime", "09:30");
+      setValue("endTime", "15:30");
     }
-  }, [data]);
+  }, [saveData]); // Only depend on saveData
 
-  /* Format time string for display: we have added the time as a string of date and time in the db(start,end time), but upon receiving it from db back, 
-   we need to format it and take what is needed, so done here*/
+  useEffect(() => {
+    if (deleteData && deleteData?.success) {
+      toast.success("Availability slot deleted successfully");
+    }
+  }, [deleteData]);
+
+  // Format time string for display
   const formatTimeString = (dateString) => {
     try {
       return format(new Date(dateString), "h:mm a");
     } catch (e) {
       return "Invalid time";
+    }
+  };
+
+  // Format date string for display
+  const formatDateString = (dateString) => {
+    try {
+      return format(new Date(dateString), "EEE, MMM d, yyyy");
+    } catch (e) {
+      return "Invalid date";
     }
   };
 
@@ -107,41 +153,75 @@ const AvailabilitySettings = ({ slots }) => {
           Availability Settings
         </CardTitle>
         <CardDescription>
-          Set your daily availability for patient appointments
+          Set your availability for specific dates. Default hours are 9:30 AM to 3:30 PM.
         </CardDescription>
       </CardHeader>
       <CardContent>
         {/* Current Availability Display */}
-        {!showForm ? ( //based on show the form or not
+        {!showForm ? (
           <>
             <div className="mb-6">
               <h3 className="text-lg font-medium text-white mb-3">
                 Current Availability
               </h3>
 
-              {slots.length === 0 ? (
+              {Object.keys(groupedSlots).length === 0 ? (
                 <p className="text-muted-foreground">
                   You haven&apos;t set any availability slots yet. Add your
                   availability to start accepting appointments.
                 </p>
               ) : (
-                <div className="space-y-3">
-                  {slots.map((slot) => (
+                <div className="space-y-4">
+                  {Object.entries(groupedSlots)
+                    .sort(([a], [b]) => new Date(a) - new Date(b))
+                    .map(([date, dateSlots]) => (
                     <div
-                      key={slot.id}
-                      className="flex items-center p-3 rounded-md bg-muted/20 border border-emerald-900/20"
+                      key={date}
+                      className="p-4 rounded-md bg-muted/20 border border-emerald-900/20"
                     >
-                      <div className="bg-emerald-900/20 p-2 rounded-full mr-3">
-                        <Clock className="h-4 w-4 text-emerald-400" />
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-white font-medium flex items-center">
+                          <Calendar className="h-4 w-4 mr-2 text-emerald-400" />
+                          {formatDateString(date)}
+                        </h4>
                       </div>
-                      <div>
-                        <p className="text-white font-medium">
-                          {formatTimeString(slot.startTime)} -{" "}
-                          {formatTimeString(slot.endTime)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {slot.appointment ? "Booked" : "Available"}
-                        </p>
+                      <div className="space-y-2">
+                        {dateSlots.map((slot) => (
+                          <div
+                            key={slot.id}
+                            className="flex items-center justify-between p-2 rounded bg-background/50"
+                          >
+                            <div className="flex items-center">
+                              <div className="bg-emerald-900/20 p-1.5 rounded-full mr-2">
+                                <Clock className="h-3 w-3 text-emerald-400" />
+                              </div>
+                              <div>
+                                <p className="text-white text-sm font-medium">
+                                  {formatTimeString(slot.startTime)} -{" "}
+                                  {formatTimeString(slot.endTime)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {slot.appointment ? "Booked" : "Available"}
+                                </p>
+                              </div>
+                            </div>
+                            {!slot.appointment && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteSlot(slot.id)}
+                                disabled={deletingSlot}
+                                className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                              >
+                                {deletingSlot ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
@@ -149,13 +229,12 @@ const AvailabilitySettings = ({ slots }) => {
               )}
             </div>
 
-            {/* to set the availabilty time(shows the form to set availability) */}
             <Button
               onClick={() => setShowForm(true)}
               className="w-full bg-emerald-600 hover:bg-emerald-700"
             >
               <Plus className="h-4 w-4 mr-2" />
-              Set Availability Time
+              Add Availability for Specific Date
             </Button>
           </>
         ) : (
@@ -164,41 +243,64 @@ const AvailabilitySettings = ({ slots }) => {
             className="space-y-4 border border-emerald-900/20 rounded-md p-4"
           >
             <h3 className="text-lg font-medium text-white mb-2">
-              Set Daily Availability
+              Set Availability for Specific Date
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-4">
+              {/* Date Selection */}
               <div className="space-y-2">
-                <Label htmlFor="startTime">Start Time</Label>
+                <Label htmlFor="date">Select Date</Label>
                 <Input
-                  id="startTime"
-                  type="time"
-                  //when we dont use zod for validation, this is how we do add validation in react hook form
-                  {...register("startTime", {
-                    required: "Start time is required",
+                  id="date"
+                  type="date"
+                  min={format(new Date(), "yyyy-MM-dd")}
+                  {...register("date", {
+                    required: "Date is required",
                   })}
                   className="bg-background border-emerald-900/20"
                 />
-                {errors.startTime && (
+                {errors.date && (
                   <p className="text-sm font-medium text-red-500">
-                    {errors.startTime.message}
+                    {errors.date.message}
                   </p>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="endTime">End Time</Label>
-                <Input
-                  id="endTime"
-                  type="time"
-                  {...register("endTime", { required: "End time is required" })}
-                  className="bg-background border-emerald-900/20"
-                />
-                {errors.endTime && (
-                  <p className="text-sm font-medium text-red-500">
-                    {errors.endTime.message}
-                  </p>
-                )}
+              {/* Time Selection */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="startTime">Start Time</Label>
+                  <Input
+                    id="startTime"
+                    type="time"
+                    {...register("startTime", {
+                      required: "Start time is required",
+                    })}
+                    className="bg-background border-emerald-900/20"
+                  />
+                  {errors.startTime && (
+                    <p className="text-sm font-medium text-red-500">
+                      {errors.startTime.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="endTime">End Time</Label>
+                  <Input
+                    id="endTime"
+                    type="time"
+                    {...register("endTime", { 
+                      required: "End time is required" 
+                    })}
+                    className="bg-background border-emerald-900/20"
+                  />
+                  {errors.endTime && (
+                    <p className="text-sm font-medium text-red-500">
+                      {errors.endTime.message}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -207,17 +309,17 @@ const AvailabilitySettings = ({ slots }) => {
                 type="button"
                 variant="outline"
                 onClick={() => setShowForm(false)}
-                disabled={loading}
+                disabled={savingSlots}
                 className="border-emerald-900/30"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                disabled={loading}
+                disabled={savingSlots}
                 className="bg-emerald-600 hover:bg-emerald-700"
               >
-                {loading ? (
+                {savingSlots ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Saving...
@@ -233,13 +335,13 @@ const AvailabilitySettings = ({ slots }) => {
         <div className="mt-6 p-4 bg-muted/10 border border-emerald-900/10 rounded-md">
           <h4 className="font-medium text-white mb-2 flex items-center">
             <AlertCircle className="h-4 w-4 mr-2 text-emerald-400" />
-            How Availability Works
+            How Date-Specific Availability Works
           </h4>
           <p className="text-muted-foreground text-sm">
-            Setting your daily availability allows patients to book appointments
-            during those hours. The same availability applies to all days. You
-            can update your availability at any time, but existing booked
-            appointments will not be affected.
+            Set your availability for specific dates. Each date can have its own
+            working hours. Default times are 9:30 AM to 3:30 PM, but you can customize
+            them for each date. You can only set one availability slot per date.
+            Existing booked appointments will not be affected when you delete availability.
           </p>
         </div>
       </CardContent>

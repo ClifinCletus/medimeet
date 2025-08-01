@@ -1,6 +1,6 @@
 import { getPatientAppointments } from "@/actions/patient";
 import  AppointmentCard from "@/components/appointment-card";
-import { PageHeader } from "@/components/page-header";
+import PageHeader  from "@/components/page-header";
 import { Calendar } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { redirect } from "next/navigation";
@@ -17,7 +17,7 @@ const PatientAppointmentsPage = async () => {
   const { appointments, error } = await getPatientAppointments();
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 pt-19 pb-0">
       <PageHeader
         icon={<Calendar />}
         title="My Appointments"

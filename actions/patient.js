@@ -24,7 +24,7 @@ export async function getPatientAppointments() {
       throw new Error("Patient not found!");
     }
 
-    const appoinments = await db.appointment.findMany({
+    const appointments = await db.appointment.findMany({
       where: {
         patientId: user.id,
       },
@@ -44,10 +44,10 @@ export async function getPatientAppointments() {
       },
     });
 
-    return { appoinments };
+    return { appointments };
   } catch (error) {
     return {
-      error: "failed to fetch appointments" + error.message,
+      error: "failed to fetch appointments: " + error.message,
     };
   }
 }

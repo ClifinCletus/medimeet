@@ -1,5 +1,3 @@
-"use client";
-
 //component to select the slot for booking appointment(would show the multiple slots  that are available)
 
 import { useState } from "react";
@@ -10,7 +8,7 @@ import { Clock, ChevronRight } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 //would show the tabs for the next four days with the first day(today) tab as default and there we can see the slots available
-const SlotPicker= async ({ days, onSelectSlot }) => {
+const SlotPicker= ({ days, onSelectSlot }) => {
   const [selectedSlot, setSelectedSlot] = useState(null); //for the selected slot
 
   // Find first day with slots as default tab: show the first day in the tab with the active slots there

@@ -3,80 +3,141 @@
 import { db } from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
-import { success } from "zod";
 
 //here contains the server actions for setting and getting my availablty slots
-
+// Server action to set availability slots for specific dates
 export async function setAvailabilitySlots(formData) {
   const { userId } = await auth();
-
+  
   if (!userId) {
     throw new Error("Unauthorized");
   }
 
   try {
-    //finding the currently logged in doctor
+    // Find the currently logged in doctor
     const doctor = await db.user.findUnique({
       where: {
         clerkUserId: userId,
         role: "DOCTOR",
       },
     });
+    
     if (!doctor) {
       throw new Error("Doctor not found");
     }
 
-    //get the information from formData
-    //the startTime and endTime set by the doctors for their availablty
+    // Get the information from formData
+    const date = formData.get("date");
     const startTime = formData.get("startTime");
     const endTime = formData.get("endTime");
 
-    if (!startTime || !endTime) {
-      throw new Error("Start time and end time are required!");
+    if (!date || !startTime || !endTime) {
+      throw new Error("Date, start time and end time are required!");
     }
 
-    if (startTime >= endTime) {
-      throw new Error("start time must be before end time");
+    // Validate that start time is before end time
+    const startDateTime = new Date(startTime);
+    const endDateTime = new Date(endTime);
+    
+    if (startDateTime >= endDateTime) {
+      throw new Error("Start time must be before end time");
     }
 
-    //if doctor have any existing slots, delete it and add the new slots
-    const existingSlots = await db.availability.findMany({
+    // Check if there's already an availability slot for this date
+    const existingSlotForDate = await db.availability.findFirst({
       where: {
         doctorId: doctor.id,
+        startTime: {
+          gte: new Date(date + "T00:00:00.000Z"),
+          lt: new Date(date + "T23:59:59.999Z"),
+        },
       },
     });
 
-    if (existingSlots.length > 0) {
-      //finding slots with no appointment and deleting it
-      const slotsWithAppointments = existingSlots.filter(
-        (slot) => !slot.appointment
-      );
-
-      if (slotsWithAppointments.length > 0) {
-        await db.availability.deleteMany({
-          where: {
-            id: {
-              in: slotsWithAppointments.map((slot) => slot.id),
-            },
-          },
-        });
-      }
+    if (existingSlotForDate) {
+      throw new Error("Availability already exists for this date. Delete the existing slot first.");
     }
 
-    //creating new availability slot
+    // Create new availability slot for the specific date
     const newSlot = await db.availability.create({
       data: {
         doctorId: doctor.id,
-        startTime: new Date(startTime),
-        endTime: new Date(endTime),
+        startTime: startDateTime,
+        endTime: endDateTime,
         status: "AVAILABLE",
       },
     });
 
+    // Revalidate the doctor page to show updated availability
     revalidatePath("/doctor");
+    
     return { success: true, slot: newSlot };
   } catch (error) {
-    throw new Error("failed to set availability: " + error.message);
+    throw new Error("Failed to set availability: " + error.message);
+  }
+}
+
+// Server action to delete an availability slot
+export async function deleteAvailabilitySlot(formData) {
+  const { userId } = await auth();
+  
+  if (!userId) {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    // Find the currently logged in doctor
+    const doctor = await db.user.findUnique({
+      where: {
+        clerkUserId: userId,
+        role: "DOCTOR",
+      },
+    });
+    
+    if (!doctor) {
+      throw new Error("Doctor not found");
+    }
+
+    // Get the slot ID from formData
+    const slotId = formData.get("slotId");
+    
+    if (!slotId) {
+      throw new Error("Slot ID is required!");
+    }
+
+    // Find the slot and verify it belongs to this doctor
+    const slot = await db.availability.findFirst({
+      where: {
+        id: slotId,
+        doctorId: doctor.id,
+      },
+      include: {
+        appointment: true, // Include appointment to check if slot is booked
+      },
+    });
+
+    if (!slot) {
+      throw new Error("Availability slot not found or unauthorized");
+    }
+
+    // Don't allow deletion if there's a booked appointment
+    if (slot.appointment) {
+      throw new Error("Cannot delete availability slot with existing appointment");
+    }
+
+    // Delete the availability slot
+    await db.availability.delete({
+      where: {
+        id: slotId,
+      },
+    });
+
+    // Revalidate the doctor page to show updated availability
+    revalidatePath("/doctor");
+    
+    return { success: true, message: "Availability slot deleted successfully" };
+  } catch (error) {
+    throw new Error("Failed to delete availability slot: " + error.message);
   }
 }
 
